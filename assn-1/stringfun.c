@@ -1,3 +1,6 @@
+//Nitish Chawla, nkc47
+//Assignment 1, CS283
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
