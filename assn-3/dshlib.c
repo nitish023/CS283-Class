@@ -55,7 +55,7 @@ int build_cmd_list(char *cmd_line, command_list_t *clist)
         {
             return ERR_TOO_MANY_COMMANDS;
         }
-        
+        ;
         //checking spaces
         while (*token == SPACE_CHAR)
         {

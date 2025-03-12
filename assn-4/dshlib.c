@@ -9,7 +9,9 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/wait.h>
+#include <errno.h>
 #include "dshlib.h"
+int last_command_code = 0;
 
 /*
  * Implement your exec_local_cmd_loop function by building a loop that prompts the 
@@ -116,6 +118,8 @@ int build_cmd_buff(char *cmd_line, cmd_buff_t *cmd_buff)
         if (*p == '"')
         {
             has_quotes = !has_quotes;
+            *p = '\0';
+            continue;
         }
         else if (!has_quotes && *p == SPACE_CHAR)
         {
@@ -163,7 +167,7 @@ Built_In_Cmds exec_built_in_cmd(cmd_buff_t *cmd)
 
         if (chdir(cmd->argv[1]) != 0)
         {
-
+            printf(CMD_ERR_EXECUTE);
         }
 
         return BI_EXECUTED;
@@ -171,7 +175,7 @@ Built_In_Cmds exec_built_in_cmd(cmd_buff_t *cmd)
 
     if (strcmp(cmd->argv[0], "rc") == 0)
     {
-        printf("%d\n", cmd->argc);
+        printf("%d\n", last_command_code);
         return BI_EXECUTED;
     }
 
@@ -186,16 +190,28 @@ int exec_cmd(cmd_buff_t *cmd)
     pid_t pid = fork();
     int status;
 
-    if (pid < -0)
+    if (pid < 0)
     {
         return ERR_EXEC_CMD;
     }
     if (pid == 0)
     {
         execvp(cmd->argv[0], cmd->argv);
-        return ERR_EXEC_CMD;
+        switch (errno)
+        {
+            case ENOENT:
+                fprintf(stderr, "Command not found in PATH\n");
+                exit(2);
+            case EACCES:
+                fprintf(stderr, "Permission denied\n");
+                exit(3);
+            default:
+                fprintf(stderr, "Execution failed: %s\n", strerror(errno));
+                exit(errno);
+        }
     } else {
         waitpid(pid, &status, 0);
-        return WEXITSTATUS(status);
+        last_command_code = WEXITSTATUS(status);
+        return last_command_code;
     }
 }
