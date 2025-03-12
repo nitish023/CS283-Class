@@ -49,7 +49,7 @@
  */
 int main()
 {
-    char cmd_buff[SH_CMD_MAX];
+    char *cmd_buff = malloc(SH_CMD_MAX);
     int rc = 0;
     command_list_t clist;
 
@@ -97,5 +97,6 @@ int main()
             printf(CMD_ERR_PIPE_LIMIT, CMD_MAX);
         }
     }
+    free(cmd_buff);
     return 0;
 }
