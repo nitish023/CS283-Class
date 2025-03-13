@@ -62,7 +62,7 @@ int last_command_code = 0;
 
 
 
- ///WORK///////
+ ///WORKS///////
 int exec_local_cmd_loop()
 {
     char *cmd_buff = malloc(SH_CMD_MAX);
@@ -342,9 +342,11 @@ int execute_pipeline(command_list_t *clist)
 
     //this is if there is no pipeline i.e there is only one command
     int total_cmds = clist->num;
-    if (total_cmds == 1) {
+    if (total_cmds == 1) 
+    {
         Built_In_Cmds cmd_type = exec_built_in_cmd(&clist->commands[0]);
-        if (cmd_type == BI_EXECUTED) {
+        if (cmd_type == BI_EXECUTED) 
+        {
             return OK;
         }
         return exec_cmd(&clist->commands[0]);
@@ -353,8 +355,10 @@ int execute_pipeline(command_list_t *clist)
     int pipe_fds[CMD_MAX-1][2];
     pid_t pids[CMD_MAX];
 
-    for (int i = 0; i < total_cmds - 1; i++) {
-        if (pipe(pipe_fds[i]) == -1) {
+    for (int i = 0; i < total_cmds - 1; i++) 
+    {
+        if (pipe(pipe_fds[i]) == -1) 
+        {
             for (int j = 0; j < i; j++) 
             {
                 close(pipe_fds[j][0]);
@@ -380,7 +384,8 @@ int execute_pipeline(command_list_t *clist)
         }
         pids[i] = fork();
         
-        if (pids[i] < 0) {
+        if (pids[i] < 0) 
+        {
             for (int j = 0; j < total_cmds - 1; j++) 
             {
                 close(pipe_fds[j][0]);
