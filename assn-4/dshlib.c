@@ -58,7 +58,7 @@ int last_command_code = 0;
  */
 int exec_local_cmd_loop()
 {
-    char cmd_buff[ARG_MAX];
+    char *cmd_buff = malloc(SH_CMD_MAX);
     cmd_buff_t cmd;
 
     // TODO IMPLEMENT MAIN LOOP
@@ -91,6 +91,7 @@ int exec_local_cmd_loop()
 
         exec_cmd(&cmd);
     }
+    free(cmd_buff);
     return OK;
 }
 
