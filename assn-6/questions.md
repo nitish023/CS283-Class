@@ -12,9 +12,8 @@ A networked shell protocol should define the message boundaries using delimeters
 Stateful protocosl maintain the client session information between requests like TCP, which thus requries remembering prior interactions and requiring connection setup/teardown. Stateless protocols on the other hand treat each request as independent containing all information without server-side memory from prior requests.
 
 4. Our lecture this week stated that UDP is "unreliable". If that is the case, why would we ever use it?
-
-
+We would use UDP despite being unreliable because it offers smaller overhead and lower latency. It also offers better performance for real-life applications. We would use it where timeliness matters more than always being reliable.
 
 5. What interface/abstraction is provided by the operating system to enable applications to use network communications?
 
-_answer here_
+Operating systems provide the socket interface/api as the main abstraction for network commujnications. This may include functions for connection management or data transfer or connection termination. The unified interface abstacts away the underlying protocols and hardware.
