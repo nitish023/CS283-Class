@@ -216,3 +216,77 @@ EOF
     [ "$stripped_output" = "$expected_output" ]
     [ "$status" -eq 0 ]
 }
+
+#works
+@test "Output redirection: simple echo to file" {
+    current=$(pwd)
+    
+    run "${current}/dsh" <<EOF
+echo "hello world" > test_output.txt
+cat test_output.txt
+rm test_output.txt
+exit
+EOF
+    
+    echo "Captured stdout:" 
+    echo "Output: $output"
+    echo "Exit Status: $status"
+    [[ "$output" == *"hello world"* ]]
+    [ "$status" -eq 0 ]
+}
+
+#works
+@test "Input redirection: cat from file" {
+    current=$(pwd)
+    
+    run "${current}/dsh" <<EOF
+echo "input test data" > test_input.txt
+cat < test_input.txt
+rm test_input.txt
+exit
+EOF
+    
+    echo "Captured stdout:" 
+    echo "Output: $output"
+    echo "Exit Status: $status"
+    [[ "$output" == *"input test data"* ]]
+    [ "$status" -eq 0 ]
+}
+
+#working
+@test "Pipes with redirection: cat from file, pipe to tr, output to file" {
+    current=$(pwd)
+    
+    run "${current}/dsh" <<EOF
+echo "text for pipe test" > pipe_input.txt
+cat < pipe_input.txt | tr 'a-z' 'A-Z' > pipe_output.txt
+cat pipe_output.txt
+rm pipe_input.txt pipe_output.txt
+exit
+EOF
+    
+    echo "Captured stdout:" 
+    echo "Output: $output"
+    echo "Exit Status: $status"
+    [[ "$output" == *"TEXT FOR PIPE TEST"* ]]
+    [ "$status" -eq 0 ]
+}
+
+@test "Multiple redirections in pipeline" {
+    current=$(pwd)
+    
+    run "${current}/dsh" <<EOF
+echo "first line" > multi_test.txt
+echo "second line" >> multi_test.txt
+cat < multi_test.txt | grep "line" | tr 'a-z' 'A-Z' > multi_out.txt
+cat multi_out.txt
+rm multi_test.txt multi_out.txt
+exit
+EOF
+    
+    echo "Captured stdout:" 
+    echo "Output: $output"
+    echo "Exit Status: $status"
+    [[ "$output" == *"FIRST LINE"* && "$output" == *"SECOND LINE"* ]]
+    [ "$status" -eq 0 ]
+}

@@ -123,6 +123,9 @@ int build_cmd_buff(char *cmd_line, cmd_buff_t *cmd_buff)
         return ERR_MEMORY;
     }
 
+    cmd_buff->input_file = NULL;
+    cmd_buff->output_file = NULL;
+    cmd_buff->append_output = 0;
     int arg_begin = 0;
     bool has_quotes = false;
 
@@ -154,6 +157,52 @@ int build_cmd_buff(char *cmd_line, cmd_buff_t *cmd_buff)
     cmd_buff->argv[arg_begin] = NULL;
     cmd_buff->argc = arg_begin;
 
+    for (int i = 0; i < arg_begin; i++)
+    {
+        if (strcmp(cmd_buff->argv[i], "<") == 0)
+        {
+            if (i + 1 < arg_begin)
+            {
+                cmd_buff->input_file = cmd_buff->argv[i + 1];
+                for (int j = i; j < arg_begin - 2; j++)
+                {
+                    cmd_buff->argv[j] = cmd_buff->argv[j + 2];
+                }
+                arg_begin -= 2;
+                i--;
+            }
+        }
+        else if (strcmp(cmd_buff->argv[i], ">") == 0)
+        {
+            if (i + 1 < arg_begin)
+            {
+                cmd_buff->output_file = cmd_buff->argv[i + 1];
+                cmd_buff->append_output = 0;
+                for (int j = i; j < arg_begin - 2; j++)
+                {
+                    cmd_buff->argv[j] = cmd_buff->argv[j + 2];
+                }
+                arg_begin -= 2;
+                i--;
+            }
+        }
+        else if (strcmp(cmd_buff->argv[i], ">>") == 0)
+        {
+            if (i + 1 < arg_begin)
+            {
+                cmd_buff->output_file = cmd_buff->argv[i + 1];
+                cmd_buff->append_output = 1;
+                for (int j = i; j < arg_begin - 2; j++)
+                {
+                    cmd_buff->argv[j] = cmd_buff->argv[j + 2];
+                }
+                arg_begin -= 2;
+                i--;
+            }
+        }
+    }
+    cmd_buff->argv[arg_begin] = NULL;
+    cmd_buff->argc = arg_begin;
     return OK;
 }
 
@@ -312,6 +361,36 @@ int exec_cmd(cmd_buff_t *cmd)
     }
     if (pid == 0)
     {
+        if (cmd->input_file != NULL)
+        {
+            int fd = open(cmd->input_file, O_RDONLY);
+            if (fd == -1)
+            {
+                exit(1);
+            }
+            dup2(fd, STDIN_FILENO);
+            close(fd);
+        }
+
+        if (cmd->output_file != NULL)
+        {
+            int flags = O_WRONLY | O_CREAT;
+            if (cmd->append_output)
+            {
+                flags |= O_APPEND;
+            }
+            else
+            {
+                flags |= O_TRUNC;
+            }
+            int fd = open(cmd->output_file, flags, 0644);
+            if (fd == -1)
+            {
+                exit(1);
+            }
+            dup2(fd, STDOUT_FILENO);
+            close(fd);
+        }
         execvp(cmd->argv[0], cmd->argv);
         switch (errno)
         {
@@ -399,10 +478,41 @@ int execute_pipeline(command_list_t *clist)
             {
                 dup2(pipe_fds[i-1][0], STDIN_FILENO);
             }
+            else if (clist->commands[i].input_file != NULL) 
+            {
+                int fd = open(clist->commands[i].input_file, O_RDONLY);
+                if (fd == -1) 
+                {
+                    exit(1);
+                }
+                dup2(fd, STDIN_FILENO);
+                close(fd);
+            }
+
             if (i < total_cmds - 1) 
             {
                 dup2(pipe_fds[i][1], STDOUT_FILENO);
             }
+            else if (clist->commands[i].output_file != NULL) 
+            {
+                int flags = O_WRONLY | O_CREAT;
+                if (clist->commands[i].append_output) 
+                {
+                    flags |= O_APPEND;
+                } 
+                else 
+                {
+                    flags |= O_TRUNC;
+                }
+                int fd = open(clist->commands[i].output_file, flags, 0644);
+                if (fd == -1) 
+                {
+                    exit(1);
+                }
+                dup2(fd, STDOUT_FILENO);
+                close(fd);
+            }
+
             for (int j = 0; j < total_cmds - 1; j++) 
             {
                 close(pipe_fds[j][0]);
