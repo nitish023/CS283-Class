@@ -13,13 +13,87 @@
 #include <errno.h>
 
 //INCLUDES for extra credit
-//#include <signal.h>
-//#include <pthread.h>
+#include <signal.h>
+#include <pthread.h>
 //-------------------------
 
 #include "dshlib.h"
 #include "rshlib.h"
 
+int g_active_clients = 0;
+int g_is_threaded = 0;
+int g_should_stop = 0;
+pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t g_print_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+typedef struct 
+{
+    int main_socket;
+    int client_socket;
+} thread_args_t;
+
+//first pre-def function
+void set_threaded_server(int val) 
+{
+    g_is_threaded = val;
+}
+
+//second pre-def func
+int exec_client_thread(int main_socket, int cli_socket) 
+{
+    pthread_t thread_id;
+    thread_args_t *args = malloc(sizeof(thread_args_t));
+    if (!args) 
+    {
+        close(cli_socket);
+        return ERR_RDSH_SERVER;
+    }
+    args->main_socket = main_socket;
+    args->client_socket = cli_socket;
+    if (pthread_create(&thread_id, NULL, handle_client, args) != 0) 
+    {
+        free(args);
+        close(cli_socket);
+        return ERR_RDSH_SERVER;
+    }
+    pthread_detach(thread_id);
+    return OK;
+}
+
+//third pre-def function
+void *handle_client(void *arg) 
+{
+    thread_args_t *args = (thread_args_t *)arg;
+    int cli_socket = args->client_socket;
+    int rc;
+    pthread_mutex_lock(&g_mutex);
+    g_active_clients++;
+    pthread_mutex_unlock(&g_mutex);
+    rc = exec_client_requests(cli_socket);
+    close(cli_socket);
+    free(args);
+    
+    //check rc val
+    if (rc == OK_EXIT) 
+    {
+        pthread_mutex_lock(&g_print_mutex);
+        printf(RCMD_MSG_SVR_STOP_REQ);
+        pthread_mutex_unlock(&g_print_mutex);
+        pthread_mutex_lock(&g_mutex);
+        g_should_stop = 1;
+        pthread_mutex_unlock(&g_mutex);
+    } else {
+        pthread_mutex_lock(&g_print_mutex);
+        printf(RCMD_MSG_CLIENT_EXITED);
+        pthread_mutex_unlock(&g_print_mutex);
+    }
+    
+    pthread_mutex_lock(&g_mutex);
+    g_active_clients--;
+    pthread_mutex_unlock(&g_mutex);
+    
+    return NULL;
+}
 
 /*
  * start_server(ifaces, port, is_threaded)
@@ -50,7 +124,6 @@
  *      TO DO SOMETHING WITH THE is_threaded ARGUMENT HOWEVER.  
  */
 int start_server(char *ifaces, int port, int is_threaded){
-    (void)is_threaded;
     int svr_socket;
     int rc;
 
@@ -58,6 +131,7 @@ int start_server(char *ifaces, int port, int is_threaded){
     //TODO:  If you are implementing the extra credit, please add logic
     //       to keep track of is_threaded to handle this feature
     //
+    set_threaded_server(is_threaded);
 
     svr_socket = boot_server(ifaces, port);
     if (svr_socket < 0){
@@ -218,8 +292,27 @@ int process_cli_requests(int svr_socket){
     int     rc = OK;    
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
+    fd_set read_fds;
+    struct timeval timeout;
 
     while(1){
+        pthread_mutex_lock(&g_mutex);
+        int should_stop = g_should_stop;
+        int active_clients = g_active_clients;
+        pthread_mutex_unlock(&g_mutex);
+        if (should_stop && active_clients == 0)
+        {
+            break;
+        }
+        FD_ZERO(&read_fds);
+        FD_SET(svr_socket, &read_fds);
+        timeout.tv_sec = 1;
+        timeout.tv_usec = 0;
+        int ready = select(svr_socket + 1, &read_fds, NULL, NULL, &timeout);
+        if (ready <= 0) 
+        {
+            continue;
+        }
         // TODO use the accept syscall to create cli_socket 
         cli_socket = accept(svr_socket, (struct sockaddr *)&client_addr, &client_len);
         if (cli_socket < 0) 
@@ -227,21 +320,29 @@ int process_cli_requests(int svr_socket){
             perror("accept");
             return ERR_RDSH_COMMUNICATION;
         }
-        // and then exec_client_requests(cli_socket)
-        rc = exec_client_requests(cli_socket);
-        close(cli_socket);
-        if (rc == OK_EXIT) 
+
+        if (g_is_threaded) 
         {
-            printf(RCMD_MSG_SVR_STOP_REQ);
-            break;
-        } else 
-        {
-            printf(RCMD_MSG_CLIENT_EXITED);
+            if (exec_client_thread(svr_socket, cli_socket) != OK) 
+            {
+                close(cli_socket);
+                continue;
+            }
+        } else {
+            // and then exec_client_requests(cli_socket)
+            rc = exec_client_requests(cli_socket);
+            close(cli_socket);
+            if (rc == OK_EXIT) 
+            {
+                printf(RCMD_MSG_SVR_STOP_REQ);
+                break;
+            } else 
+            {
+                printf(RCMD_MSG_CLIENT_EXITED);
+            }
         }
     }
-
-    stop_server(cli_socket);
-    return rc;
+    return OK_EXIT;
 }
 
 /*
@@ -310,16 +411,22 @@ int exec_client_requests(int cli_socket) {
             return OK;
         }
         io_buff[io_size] = '\0';
+        pthread_mutex_lock(&g_print_mutex);
         printf(RCMD_MSG_SVR_EXEC_REQ, io_buff);
+        pthread_mutex_unlock(&g_print_mutex);
         if (strcmp(io_buff, EXIT_CMD) == 0) 
         {
+            pthread_mutex_lock(&g_print_mutex);
             printf(RCMD_MSG_CLIENT_EXITED);
+            pthread_mutex_unlock(&g_print_mutex);
             free(io_buff);
             return OK;
         }
         if (strcmp(io_buff, "stop-server") == 0) 
         {
+            pthread_mutex_lock(&g_print_mutex);
             printf(RCMD_MSG_SVR_STOP_REQ);
+            pthread_mutex_unlock(&g_print_mutex);
             free(io_buff);
             return OK_EXIT;
         }

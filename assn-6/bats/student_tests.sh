@@ -211,5 +211,35 @@ EOF
     [[ "$stripped_output2" == *"client2"* ]]
 }
 
+#working
+@test "Multi-threaded Server: Concurrent Processing" {
+    PORT=12346
+    ./dsh -s -p $PORT -x &
+    SERVER_PID=$!
+    sleep 1
+    
+    OUTPUT1=$(mktemp)
+    OUTPUT2=$(mktemp)
+    
+    (echo -e "sleep 3\necho SLOW_DONE\nexit" | ./dsh -c -p $PORT > $OUTPUT1) &
+    PID1=$!
+    
+    sleep 0.5
+    
+    (echo -e "sleep 1\necho FAST_DONE\nexit" | ./dsh -c -p $PORT > $OUTPUT2) &
+    PID2=$!
+    wait $PID1
+    wait $PID2
+
+    TIME1=$(date -r $OUTPUT1 +%s)
+    TIME2=$(date -r $OUTPUT2 +%s)
+    DIFF=$(($TIME1 - $TIME2))
+    
+    kill $SERVER_PID 2>/dev/null || true
+    wait $SERVER_PID 2>/dev/null || true
+    rm $OUTPUT1 $OUTPUT2
+    echo "Time difference between clients: $DIFF seconds"
+    [ $DIFF -ge 1 ]
+}
 
 
